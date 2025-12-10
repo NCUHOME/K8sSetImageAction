@@ -14,7 +14,7 @@
 
 ```yaml
 - name: Update Deployment
-  uses: MultiMx/K8sSetImageAction@v0.7
+  uses: NCUHOME/K8sSetImageAction@v1.0
   with:
     backend: "https://some.rancher.com"
     token: ${{ secrets.CATTLE_TOKEN }} # Rancher API Bearer Token
