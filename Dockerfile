@@ -1,27 +1,20 @@
-FROM golang:latest AS builder
-
-WORKDIR /build
-
-COPY . .
-
-RUN go env -w GO111MODULE=auto \
-    && go env -w CGO_ENABLED=0 \
-    && set -ex \
-    && go build -ldflags "-s -w -extldflags '-static'" -o runner
-
 FROM alpine:latest
 
+# 安装必要工具: curl (HTTP 请求) 和 jq (JSON 处理)
 RUN apk update && \
     apk upgrade --no-cache && \
-    apk add --no-cache tzdata && \
+    apk add --no-cache curl jq tzdata && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo 'Asia/Shanghai' >/etc/timezone && \
     rm -rf /var/cache/apk/*
 
-COPY --from=builder  /build/runner /usr/bin/runner
+# 复制 Shell 脚本
+COPY set-image.sh /usr/bin/set-image.sh
 
-RUN chmod +x /usr/bin/runner
+# 设置执行权限
+RUN chmod +x /usr/bin/set-image.sh
 
 WORKDIR /data
 
-ENTRYPOINT [ "/usr/bin/runner" ]
+# 执行脚本
+ENTRYPOINT ["/usr/bin/set-image.sh"]
