@@ -178,15 +178,26 @@ update_image() {
     local attempt=$1
     echo "[尝试 ${attempt}/5] 更新镜像..."
 
-    # 使用 jq 安全构造 JSON Patch
+    # 生成 UTC 时间戳
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    # 使用 jq 安全构造 JSON Patch (包含镜像更新和时间戳注解)
     PAYLOAD=$(jq -n \
         --arg container "$CONTAINER" \
         --arg image "$IMAGE" \
-        '[{
-            "op": "replace",
-            "path": ("/spec/template/spec/containers/" + $container + "/image"),
-            "value": $image
-        }]')
+        --arg timestamp "$TIMESTAMP" \
+        '[
+            {
+                "op": "replace",
+                "path": ("/spec/template/spec/containers/" + $container + "/image"),
+                "value": $image
+            },
+            {
+                "op": "add",
+                "path": "/spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt",
+                "value": $timestamp
+            }
+        ]')
 
     # 调用 Rancher API
     HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/response.json \
@@ -199,7 +210,7 @@ update_image() {
         "$API_URL")
 
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-        echo "✓ 镜像更新成功"
+        echo "✓ 镜像更新成功 (强制重启于 ${TIMESTAMP})"
         return 0
     else
         echo "✗ 请求失败 (HTTP ${HTTP_CODE})"
