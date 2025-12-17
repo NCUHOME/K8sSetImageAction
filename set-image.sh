@@ -125,7 +125,8 @@ validate_backend() {
 
 urlencode() {
     local string="$1"
-    echo "$string" | jq -sRr @uri
+    # 这样写可以避免换行符问题
+    printf '%s' "$string" | jq -Rr @uri
 }
 
 # 参数验证
@@ -164,29 +165,36 @@ update_image() {
 
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    # 使用 jq 构造 JSON Patch
+    # 使用 Strategic Merge Patch 会自动创建不存在的字段
     PAYLOAD=$(jq -n \
-        --arg container "$CONTAINER" \
+        --argjson container "$CONTAINER" \
         --arg image "$IMAGE" \
         --arg timestamp "$TIMESTAMP" \
-        '[
-            {
-                "op": "replace",
-                "path": ("/spec/template/spec/containers/" + $container + "/image"),
-                "value": $image
-            },
-            {
-                "op": "add",
-                "path": "/spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt",
-                "value": $timestamp
+        '{
+            "spec": {
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": $timestamp
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": ("container-" + ($container | tostring)),
+                                "image": $image
+                            }
+                        ]
+                    }
+                }
             }
-        ]')
+        }')
 
     HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/response.json \
         -X PATCH \
         -H "User-Agent: curl/7.72.0" \
         -H "Accept: */*" \
-        -H "Content-Type: application/json-patch+json" \
+        -H "Content-Type: application/strategic-merge-patch+json" \
         -H "Authorization: bearer ${TOKEN}" \
         -d "$PAYLOAD" \
         "$API_URL")
