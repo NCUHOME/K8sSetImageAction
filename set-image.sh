@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # K8s Set Image Action - 通过 Rancher API 更新 Kubernetes Workload 镜像
 
 set -e
@@ -130,9 +130,15 @@ urlencode() {
 }
 
 # 参数验证
-if [ -z "$BACKEND" ] || [ -z "$TOKEN" ] || [ -z "$NAMESPACE" ] || [ -z "$WORKLOAD" ] || [ -z "$IMAGE" ]; then
-    echo "错误: 缺少必需参数"
-    echo "必需: backend, token, namespace, workload, image"
+MISSING=""
+[ -z "$BACKEND" ] && MISSING="${MISSING} backend"
+[ -z "$TOKEN" ] && MISSING="${MISSING} token"
+[ -z "$NAMESPACE" ] && MISSING="${MISSING} namespace"
+[ -z "$WORKLOAD" ] && MISSING="${MISSING} workload"
+[ -z "$IMAGE" ] && MISSING="${MISSING} image"
+
+if [ -n "$MISSING" ]; then
+    echo "错误: 缺少必需参数:${MISSING}"
     exit 1
 fi
 
@@ -158,16 +164,40 @@ echo "镜像: ${IMAGE}"
 echo "容器索引: ${CONTAINER}"
 echo ""
 
+# 获取真实容器名
+get_container_name() {
+    local index=$1
+
+    HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/workload.json \
+        -H "Authorization: bearer ${TOKEN}" \
+        "$API_URL")
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "错误: 无法获取 workload 信息 (HTTP ${HTTP_CODE})"
+        exit 1
+    fi
+
+    local container_count
+    container_count=$(jq '.spec.template.spec.containers | length' /tmp/workload.json)
+
+    if [ "$index" -ge "$container_count" ]; then
+        echo "错误: container 索引 ${index} 超出范围 (共 ${container_count} 个容器)"
+        exit 1
+    fi
+
+    jq -r ".spec.template.spec.containers[${index}].name" /tmp/workload.json
+}
+
 # 更新镜像
 update_image() {
     local attempt=$1
+    local container_name=$2
     echo "[尝试 ${attempt}/5] 更新镜像..."
 
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    # 使用 Strategic Merge Patch 会自动创建不存在的字段
     PAYLOAD=$(jq -n \
-        --argjson container "$CONTAINER" \
+        --arg name "$container_name" \
         --arg image "$IMAGE" \
         --arg timestamp "$TIMESTAMP" \
         '{
@@ -181,7 +211,7 @@ update_image() {
                     "spec": {
                         "containers": [
                             {
-                                "name": ("container-" + ($container | tostring)),
+                                "name": $name,
                                 "image": $image
                             }
                         ]
@@ -212,9 +242,13 @@ update_image() {
     fi
 }
 
+# 获取真实容器名
+CONTAINER_NAME=$(get_container_name "$CONTAINER")
+echo "目标容器: ${CONTAINER_NAME}"
+
 # 重试逻辑
 for i in 1 2 3 4 5; do
-    if update_image $i; then
+    if update_image $i "$CONTAINER_NAME"; then
         break
     fi
 
@@ -223,8 +257,8 @@ for i in 1 2 3 4 5; do
         exit 1
     fi
 
-    echo "等待 1 秒后重试..."
-    sleep 1
+    echo "等待 ${i} 秒后重试..."
+    sleep $i
 done
 
 # 等待部署完成
@@ -276,14 +310,14 @@ if [ "$WAIT" = "true" ]; then
             echo "✓ 部署成功：新版本已完全可用"
             break
         fi
-
-        if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "错误: 等待超时，部署未在 ${TIMEOUT} 秒内完成"
-            echo "最终状态:"
-            jq .status /tmp/status.json
-            exit 1
-        fi
     done
+
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+        echo "错误: 等待超时，部署未在 ${TIMEOUT} 秒内完成"
+        echo "最终状态:"
+        jq .status /tmp/status.json
+        exit 1
+    fi
 fi
 
 echo ""
