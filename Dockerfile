@@ -1,9 +1,8 @@
 FROM alpine:latest
 
-# 安装必要工具: curl (HTTP 请求) 和 jq (JSON 处理)
+# 安装必要工具: curl (HTTP 请求), jq (JSON 处理), bash (脚本执行)
 RUN apk update && \
-    apk upgrade --no-cache && \
-    apk add --no-cache curl jq tzdata && \
+    apk add --no-cache bash curl jq tzdata && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo 'Asia/Shanghai' >/etc/timezone && \
     rm -rf /var/cache/apk/*
