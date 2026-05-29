@@ -33,6 +33,7 @@ inputs:
     description: 'Wait timeout in seconds'
     required: false
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
-  network: 'host'
+  using: 'composite'
+  steps:
+    - run: bash ${{ github.action_path }}/set-image.sh
+      shell: bash
