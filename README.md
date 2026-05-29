@@ -6,7 +6,7 @@
 
 - ✅ 轻量级 Shell 脚本实现
 - ✅ 支持所有 Rancher 管理的 K8s 集群
-- ✅ 支持 Deployment、DaemonSet 和 StatefulSet
+- ✅ 支持 Deployment、DaemonSet、StatefulSet 和 CronJob
 - ✅ 自动重试（最多 5 次）
 - ✅ 可选等待部署完成
 
@@ -21,8 +21,9 @@
     namespace: "control"
     workload: "apicenter"
     image: "image.url:version"
-    type: "daemonsets" # 可选, 默认 'deployments', 支持 deployments/daemonsets/statefulsets
+    type: "daemonsets" # 可选, 默认 'deployments', 支持 deployments/daemonsets/statefulsets/cronjobs
     container: "1" # 可选, 容器索引, 默认 0
     wait: "true" # 可选, 等待部署完全可用, 默认 false
+    waittimeout: "300" # 可选, 等待超时秒数, 默认 300
     cluster: "local" # 可选, 集群名称, 默认 'local'
 ```
