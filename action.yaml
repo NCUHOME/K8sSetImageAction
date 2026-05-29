@@ -35,3 +35,4 @@ inputs:
 runs:
   using: 'docker'
   image: 'Dockerfile'
+  network: 'host'
