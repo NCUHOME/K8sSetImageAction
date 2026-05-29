@@ -29,6 +29,9 @@ inputs:
   wait:
     description: 'Waiting workload available'
     required: false
+  waittimeout:
+    description: 'Wait timeout in seconds'
+    required: false
 runs:
   using: 'docker'
   image: 'Dockerfile'
