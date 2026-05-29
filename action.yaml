@@ -37,3 +37,14 @@ runs:
   steps:
     - run: bash ${{ github.action_path }}/set-image.sh
       shell: bash
+      env:
+        INPUT_SERVER: ${{ inputs.server }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_CLUSTER: ${{ inputs.cluster }}
+        INPUT_NAMESPACE: ${{ inputs.namespace }}
+        INPUT_TYPE: ${{ inputs.type }}
+        INPUT_WORKLOAD: ${{ inputs.workload }}
+        INPUT_CONTAINER: ${{ inputs.container }}
+        INPUT_IMAGE: ${{ inputs.image }}
+        INPUT_WAIT: ${{ inputs.wait }}
+        INPUT_WAITTIMEOUT: ${{ inputs.waittimeout }}
