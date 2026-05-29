@@ -21,6 +21,7 @@ WORKLOAD="${INPUT_WORKLOAD}"
 CONTAINER="${INPUT_CONTAINER:-0}"
 IMAGE="${INPUT_IMAGE}"
 WAIT="${INPUT_WAIT:-false}"
+WAITTIMEOUT="${INPUT_WAITTIMEOUT:-300}"
 
 # 验证 K8s 资源名称 (RFC 1123)
 validate_k8s_name() {
@@ -58,15 +59,24 @@ validate_container_index() {
     fi
 }
 
+validate_wait_timeout() {
+    local timeout="$1"
+
+    if ! echo "$timeout" | grep -qE '^[1-9][0-9]*$'; then
+        echo "错误: waittimeout 必须是正整数"
+        exit 1
+    fi
+}
+
 validate_workload_type() {
     local type="$1"
     
     case "$type" in
-        deployments|daemonsets|statefulsets)
+        deployments|daemonsets|statefulsets|cronjobs)
             ;;
         *)
             echo "错误: 不支持的 workload 类型: ${type}"
-            echo "支持: deployments, daemonsets, statefulsets"
+            echo "支持: deployments, daemonsets, statefulsets, cronjobs"
             exit 1
             ;;
     esac
@@ -150,19 +160,32 @@ validate_k8s_name "$CLUSTER" "cluster"
 validate_workload_type "$TYPE"
 validate_container_index "$CONTAINER"
 validate_image "$IMAGE"
+validate_wait_timeout "$WAITTIMEOUT"
 
 # 构建 API URL
 BACKEND="${BACKEND%/}"
 NAMESPACE_ENCODED=$(urlencode "$NAMESPACE")
 WORKLOAD_ENCODED=$(urlencode "$WORKLOAD")
 CLUSTER_ENCODED=$(urlencode "$CLUSTER")
-API_URL="${BACKEND}/k8s/clusters/${CLUSTER_ENCODED}/apis/apps/v1/namespaces/${NAMESPACE_ENCODED}/${TYPE}/${WORKLOAD_ENCODED}"
+
+if [ "$TYPE" = "cronjobs" ]; then
+    API_URL="${BACKEND}/k8s/clusters/${CLUSTER_ENCODED}/apis/batch/v1/namespaces/${NAMESPACE_ENCODED}/cronjobs/${WORKLOAD_ENCODED}"
+else
+    API_URL="${BACKEND}/k8s/clusters/${CLUSTER_ENCODED}/apis/apps/v1/namespaces/${NAMESPACE_ENCODED}/${TYPE}/${WORKLOAD_ENCODED}"
+fi
 
 echo "=== K8s Set Image Action ==="
 echo "API URL: ${API_URL}"
 echo "镜像: ${IMAGE}"
 echo "容器索引: ${CONTAINER}"
 echo ""
+
+# CronJob 的容器路径与 apps 类型不同
+if [ "$TYPE" = "cronjobs" ]; then
+    CONTAINER_PATH=".spec.jobTemplate.spec.template.spec.containers"
+else
+    CONTAINER_PATH=".spec.template.spec.containers"
+fi
 
 # 获取真实容器名
 get_container_name() {
@@ -178,14 +201,14 @@ get_container_name() {
     fi
 
     local container_count
-    container_count=$(jq '.spec.template.spec.containers | length' /tmp/workload.json)
+    container_count=$(jq "${CONTAINER_PATH} | length" /tmp/workload.json)
 
     if [ "$index" -ge "$container_count" ]; then
         echo "错误: container 索引 ${index} 超出范围 (共 ${container_count} 个容器)"
         exit 1
     fi
 
-    jq -r ".spec.template.spec.containers[${index}].name" /tmp/workload.json
+    jq -r "${CONTAINER_PATH}[${index}].name" /tmp/workload.json
 }
 
 # 更新镜像
@@ -196,29 +219,59 @@ update_image() {
 
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    PAYLOAD=$(jq -n \
-        --arg name "$container_name" \
-        --arg image "$IMAGE" \
-        --arg timestamp "$TIMESTAMP" \
-        '{
-            "spec": {
-                "template": {
-                    "metadata": {
-                        "annotations": {
-                            "kubectl.kubernetes.io/restartedAt": $timestamp
-                        }
-                    },
-                    "spec": {
-                        "containers": [
-                            {
-                                "name": $name,
-                                "image": $image
+    if [ "$TYPE" = "cronjobs" ]; then
+        PAYLOAD=$(jq -n \
+            --arg name "$container_name" \
+            --arg image "$IMAGE" \
+            --arg timestamp "$TIMESTAMP" \
+            '{
+                "spec": {
+                    "jobTemplate": {
+                        "spec": {
+                            "template": {
+                                "metadata": {
+                                    "annotations": {
+                                        "kubectl.kubernetes.io/restartedAt": $timestamp
+                                    }
+                                },
+                                "spec": {
+                                    "containers": [
+                                        {
+                                            "name": $name,
+                                            "image": $image
+                                        }
+                                    ]
+                                }
                             }
-                        ]
+                        }
                     }
                 }
-            }
-        }')
+            }')
+    else
+        PAYLOAD=$(jq -n \
+            --arg name "$container_name" \
+            --arg image "$IMAGE" \
+            --arg timestamp "$TIMESTAMP" \
+            '{
+                "spec": {
+                    "template": {
+                        "metadata": {
+                            "annotations": {
+                                "kubectl.kubernetes.io/restartedAt": $timestamp
+                            }
+                        },
+                        "spec": {
+                            "containers": [
+                                {
+                                    "name": $name,
+                                    "image": $image
+                                }
+                            ]
+                        }
+                    }
+                }
+            }')
+    fi
 
     HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/response.json \
         -X PATCH \
@@ -263,10 +316,15 @@ done
 
 # 等待部署完成
 if [ "$WAIT" = "true" ]; then
+    if [ "$TYPE" = "cronjobs" ]; then
+        echo "错误: CronJob 不支持等待"
+        exit 1
+    fi
+
     echo ""
     echo "=== 等待部署完成 ==="
 
-    TIMEOUT=300
+    TIMEOUT=$WAITTIMEOUT
     ELAPSED=0
     RETRY_COUNT=0
     MAX_RETRY=5
