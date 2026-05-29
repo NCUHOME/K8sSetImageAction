@@ -126,7 +126,7 @@ validate_token() {
 validate_backend() {
     local url="$1"
     
-    if ! echo "$url" | grep -qE '^https://[a-zA-Z0-9.-]+(:[0-9]+)?$'; then
+    if ! echo "$url" | grep -qE '^https://[a-zA-Z0-9.-]+(:[0-9]+)?/?$'; then
         echo "错误: backend URL 格式无效或不安全"
         echo "格式: https://hostname[:port]"
         exit 1
