@@ -16,7 +16,7 @@
 - name: Update Deployment
   uses: NCUHOME/K8sSetImageAction@v1.0
   with:
-    backend: "https://some.rancher.com"
+    server: "https://some.rancher.com" # Rancher Server Addr
     token: ${{ secrets.CATTLE_TOKEN }} # Rancher API Bearer Token
     namespace: "control"
     workload: "apicenter"

@@ -12,7 +12,7 @@ for cmd in jq curl; do
 done
 
 # 读取环境变量
-BACKEND="${INPUT_BACKEND}"
+BACKEND="${INPUT_SERVER}"
 TOKEN="${INPUT_TOKEN}"
 CLUSTER="${INPUT_CLUSTER:-local}"
 NAMESPACE="${INPUT_NAMESPACE}"
@@ -141,7 +141,7 @@ urlencode() {
 
 # 参数验证
 MISSING=""
-[ -z "$BACKEND" ] && MISSING="${MISSING} backend"
+[ -z "$BACKEND" ] && MISSING="${MISSING} server"
 [ -z "$TOKEN" ] && MISSING="${MISSING} token"
 [ -z "$NAMESPACE" ] && MISSING="${MISSING} namespace"
 [ -z "$WORKLOAD" ] && MISSING="${MISSING} workload"
