@@ -193,10 +193,15 @@ get_container_name() {
 
     HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/workload.json \
         -H "Authorization: bearer ${TOKEN}" \
-        "$API_URL")
+        "$API_URL") || true
 
     if [ "$HTTP_CODE" != "200" ]; then
         echo "错误: 无法获取 workload 信息 (HTTP ${HTTP_CODE})"
+        if [ -f /tmp/workload.json ] && [ -s /tmp/workload.json ]; then
+            echo "响应内容:"
+            cat /tmp/workload.json
+            echo ""
+        fi
         exit 1
     fi
 
@@ -280,7 +285,7 @@ update_image() {
         -H "Content-Type: application/strategic-merge-patch+json" \
         -H "Authorization: bearer ${TOKEN}" \
         -d "$PAYLOAD" \
-        "$API_URL")
+        "$API_URL") || true
 
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
         echo "✓ 镜像更新成功 (强制重启于 ${TIMESTAMP})"
@@ -335,7 +340,7 @@ if [ "$WAIT" = "true" ]; then
 
         HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/status.json \
             -H "Authorization: bearer ${TOKEN}" \
-            "$API_URL")
+            "$API_URL") || true
 
         if [ "$HTTP_CODE" != "200" ]; then
             RETRY_COUNT=$((RETRY_COUNT + 1))
