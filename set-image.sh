@@ -196,11 +196,11 @@ get_container_name() {
         "$API_URL") || true
 
     if [ "$HTTP_CODE" != "200" ]; then
-        echo "错误: 无法获取 workload 信息 (HTTP ${HTTP_CODE})"
+        echo "错误: 无法获取 workload 信息 (HTTP ${HTTP_CODE})" >&2
         if [ -f /tmp/workload.json ] && [ -s /tmp/workload.json ]; then
-            echo "响应内容:"
-            cat /tmp/workload.json
-            echo ""
+            echo "响应内容:" >&2
+            cat /tmp/workload.json >&2
+            echo "" >&2
         fi
         exit 1
     fi
@@ -209,7 +209,7 @@ get_container_name() {
     container_count=$(jq "${CONTAINER_PATH} | length" /tmp/workload.json)
 
     if [ "$index" -ge "$container_count" ]; then
-        echo "错误: container 索引 ${index} 超出范围 (共 ${container_count} 个容器)"
+        echo "错误: container 索引 ${index} 超出范围 (共 ${container_count} 个容器)" >&2
         exit 1
     fi
 
