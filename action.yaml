@@ -1,41 +1,47 @@
 name: Rancher Set Deployment Image Action
 description: >
-  Set Deployment Image
+  Update a Kubernetes workload image (Deployment / DaemonSet / StatefulSet / CronJob)
+  through the Rancher API.
 inputs:
   server:
-    description: 'Server Addr'
+    description: 'Rancher server URL, format: https://hostname[:port][/path] (IPv6 supported)'
     required: true
   token:
-    description: 'Bearer Token'
+    description: 'Rancher API bearer token'
     required: true
   cluster:
-    description: 'Cluster Name'
+    description: 'Rancher cluster ID or name'
     required: false
+    default: 'local'
   namespace:
-    description: 'Namespace'
+    description: 'Kubernetes namespace'
     required: true
   type:
-    description: 'Type of Workload'
+    description: 'Workload type: deployments | daemonsets | statefulsets | cronjobs'
     required: false
+    default: 'deployments'
   workload:
-    description: 'Workload Name'
+    description: 'Workload name'
     required: true
   container:
-    description: 'Deployment Container Index'
+    description: 'Container index in the pod template (0-99)'
     required: false
+    default: '0'
   image:
-    description: 'Target Image'
+    description: 'Target image'
     required: true
   wait:
-    description: 'Waiting workload available'
+    description: 'Wait until the workload is fully available (not supported for cronjobs)'
     required: false
+    default: 'false'
   waittimeout:
-    description: 'Wait timeout in seconds'
+    description: 'Wait timeout in seconds (1-999999)'
     required: false
+    default: '300'
 runs:
   using: 'composite'
   steps:
-    - run: bash ${{ github.action_path }}/set-image.sh
+    - run: bash "${{ github.action_path }}/set-image.sh"
       shell: bash
       env:
         INPUT_SERVER: ${{ inputs.server }}
@@ -48,3 +54,6 @@ runs:
         INPUT_IMAGE: ${{ inputs.image }}
         INPUT_WAIT: ${{ inputs.wait }}
         INPUT_WAITTIMEOUT: ${{ inputs.waittimeout }}
+branding:
+  icon: 'refresh-cw'
+  color: 'blue'
