@@ -109,17 +109,21 @@ check "退出码 0" '[ "$RC" -eq 0 ]'
 check "PATCH 调用 2 次" '[ "$(wc -l < "$STATE/patch-calls" | tr -d " ")" = "2" ]'
 check "两次 payload 完全一致" 'cmp -s "$STATE/payload-1.json" "$STATE/payload-2.json"'
 
-echo "== 8. 输入校验（换行 / echo -n 边界） =="
+echo "== 8. 输入校验 =="
 for bad in $'nginx:1.0\n; curl evil' '-n'; do
     reset
-    INPUT_IMAGE="$bad" run
+    MOCK_WORKLOAD="$WORKLOAD" INPUT_IMAGE="$bad" run
     RC=$?
     check "镜像 '$bad' 被拒绝" '[ "$RC" -ne 0 ]'
+    check "  报错来自 image 校验" 'grep -q "错误: image 格式无效" "$STATE/out.log"'
+    check "  校验失败前未发出请求" '[ ! -f "$STATE/get-calls" ]'
 done
 reset
-INPUT_TOKEN=$'token-a:b\nx' run
+MOCK_WORKLOAD="$WORKLOAD" INPUT_TOKEN=$'token-a:b\nx' run
 RC=$?
 check "token 含换行被拒绝" '[ "$RC" -ne 0 ]'
+check "  报错来自 token 校验" 'grep -q "错误: token 包含非法字符" "$STATE/out.log"'
+check "  校验失败前未发出请求" '[ ! -f "$STATE/get-calls" ]'
 
 echo "== 9. server 子路径 / IPv6 / 非法协议 =="
 reset
@@ -135,12 +139,15 @@ reset
 INPUT_SERVER=http://rancher.test run
 RC=$?
 check "http 被拒绝" '[ "$RC" -ne 0 ]'
+check "  报错来自 backend 校验" 'grep -q "错误: backend URL 格式无效" "$STATE/out.log"'
+check "  校验失败前未发出请求" '[ ! -f "$STATE/get-calls" ]'
 
 echo "== 10. token 不出现在命令行参数 =="
 reset
 MOCK_WORKLOAD="$WORKLOAD" INPUT_TOKEN=token-secret:xyz run
 RC=$?
 check "退出码 0" '[ "$RC" -eq 0 ]'
+check "mock 已记录命令行参数" '[ -s "$STATE/all-args" ]'
 check "token 通过 curl --config 传入" 'grep -q "Authorization: bearer token-secret:xyz" "$STATE/seen-auth"'
 check "命令行参数中无 token" '! grep -q "token-secret" "$STATE/all-args"'
 
@@ -171,6 +178,15 @@ COST=$((SECONDS - START))
 check "退出码非 0" '[ "$RC" -ne 0 ]'
 check "提示 ProgressDeadlineExceeded" 'grep -q "ProgressDeadlineExceeded" "$STATE/out.log"'
 check "未等满超时 (${COST}s < 10s)" '[ "$COST" -lt 10 ]'
+
+echo "== 14. 旧 generation 的 ProgressDeadlineExceeded 不应误判 =="
+reset
+MOCK_WORKLOAD="$WORKLOAD" \
+MOCK_STATUS_FIRST='{"metadata":{"generation":5},"status":{"observedGeneration":4,"replicas":3,"updatedReplicas":1,"availableReplicas":2,"conditions":[{"type":"Progressing","status":"False","reason":"ProgressDeadlineExceeded","message":"old failure"}]}}' \
+MOCK_STATUS='{"metadata":{"generation":5},"status":{"observedGeneration":5,"replicas":3,"updatedReplicas":3,"availableReplicas":3}}' \
+INPUT_WAIT=true INPUT_WAITTIMEOUT=6 run
+RC=$?
+check "退出码 0" '[ "$RC" -eq 0 ]'
 
 echo
 echo "通过 $PASS / 失败 $FAIL"

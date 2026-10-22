@@ -127,7 +127,7 @@ validate_image() {
         exit 1
     fi
 
-    if [[ ! "$image" =~ ^[a-zA-Z0-9._:/@-]+$ ]]; then
+    if [[ ! "$image" =~ ^[a-zA-Z0-9][a-zA-Z0-9._:/@-]*$ ]]; then
         echo "错误: image 格式无效: ${image}" >&2
         echo "只允许字母、数字、点、连字符、下划线、斜杠、冒号和 @" >&2
         exit 1
@@ -418,6 +418,14 @@ is_rollout_complete() {
         return 1
     fi
 
+    # 只有 observedGeneration 追上 generation 后，Progressing=False 才是本次发布的结果；
+    # 否则可能是上一次失败遗留在对象上的旧 condition
+    if has_progress_deadline_exceeded "$file"; then
+        echo "错误: 滚动更新已失败 (ProgressDeadlineExceeded)" >&2
+        jq -r '.status.conditions[]? | select(.type == "Progressing") | .message' "$file" >&2 2>/dev/null || true
+        exit 1
+    fi
+
     if [ "$TYPE" = "daemonsets" ]; then
         replicas=$(jq -r '.status.desiredNumberScheduled // 0' "$file")
         updated=$(jq -r '.status.updatedNumberScheduled // 0' "$file")
@@ -501,12 +509,6 @@ if [ "$WAIT" = "true" ]; then
         fi
 
         RETRY_COUNT=0
-
-        if has_progress_deadline_exceeded "$WORKDIR/status.json"; then
-            echo "错误: 滚动更新已失败 (ProgressDeadlineExceeded)" >&2
-            jq -r '.status.conditions[]? | select(.type == "Progressing") | .message' "$WORKDIR/status.json" >&2 2>/dev/null || true
-            exit 1
-        fi
 
         if is_rollout_complete "$WORKDIR/status.json"; then
             echo "✓ 部署成功：新版本已完全可用"

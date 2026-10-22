@@ -6,6 +6,9 @@ set -u
 
 STATE="${MOCK_STATE:?MOCK_STATE 未设置}"
 
+# 必须在解析前记录，shift 之后 $* 就空了
+echo "$*" >> "$STATE/all-args"
+
 out=""
 method="GET"
 payload=""
@@ -22,8 +25,6 @@ while [ $# -gt 0 ]; do
         *) shift ;;
     esac
 done
-
-echo "$*" >> "$STATE/all-args"
 
 if [ "$method" = "PATCH" ]; then
     echo x >> "$STATE/patch-calls"
