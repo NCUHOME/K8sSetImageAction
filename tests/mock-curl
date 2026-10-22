@@ -1,0 +1,64 @@
+#!/bin/bash
+# 测试用 curl 替身：按调用顺序返回预置响应
+# 由 tests/run.sh 通过 PATH 注入，状态文件放在 $MOCK_STATE
+
+set -u
+
+STATE="${MOCK_STATE:?MOCK_STATE 未设置}"
+
+# 必须在解析前记录，shift 之后 $* 就空了
+echo "$*" >> "$STATE/all-args"
+
+out=""
+method="GET"
+payload=""
+config=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -o) out="$2"; shift 2 ;;
+        -X) method="$2"; shift 2 ;;
+        -d) payload="$2"; shift 2 ;;
+        -H|-w|--connect-timeout|--max-time) shift 2 ;;
+        --config) config="$2"; shift 2 ;;
+        -s|-S|-sS) shift ;;
+        *) shift ;;
+    esac
+done
+
+if [ "$method" = "PATCH" ]; then
+    echo x >> "$STATE/patch-calls"
+    n=$(wc -l < "$STATE/patch-calls" | tr -d ' ')
+    printf '%s' "$payload" > "$STATE/payload-$n.json"
+
+    if [ -n "$config" ]; then
+        cat "$config" >> "$STATE/seen-auth"
+    fi
+
+    [ -n "$out" ] && printf '%s' '{"error":"mock"}' > "$out"
+
+    code="${MOCK_PATCH_CODE:-200}"
+    if [ -s "$STATE/patch-seq" ]; then
+        code=$(head -n 1 "$STATE/patch-seq")
+        tail -n +2 "$STATE/patch-seq" > "$STATE/patch-seq.tmp"
+        mv "$STATE/patch-seq.tmp" "$STATE/patch-seq"
+    fi
+    printf '%s' "$code"
+    exit 0
+fi
+
+echo x >> "$STATE/get-calls"
+n=$(wc -l < "$STATE/get-calls" | tr -d ' ')
+
+[ -n "${MOCK_DELAY:-}" ] && [ "$n" -gt 1 ] && sleep "$MOCK_DELAY"
+
+if [ "$n" -eq 1 ]; then
+    body="${MOCK_WORKLOAD:-}"
+elif [ "$n" -eq 2 ] && [ -n "${MOCK_STATUS_FIRST:-}" ]; then
+    body="$MOCK_STATUS_FIRST"
+else
+    body="${MOCK_STATUS:-}"
+fi
+
+[ -n "$out" ] && printf '%s' "$body" > "$out"
+printf '%s' "${MOCK_GET_CODE:-200}"
